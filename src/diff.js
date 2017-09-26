@@ -1,4 +1,5 @@
 import _ from './utils'
+import listDiff from './list-diff'
 const REPLACE = 0
 const ATTRS = 1
 const TEXT = 2
@@ -26,12 +27,20 @@ const diffAttrs = (oldNode, newNode) => {
         }
     })
     if(count === 0){
-        return {}
+        return null
     }
     return attrsPatches
 }
 let keyId = 0
-const diffChildren = (oldChildren, newChildren, index, patches) => {
+const diffChildren = (oldChildren, newChildren, index, patches, currentPatch) => {
+    let diffs = listDiff(oldChildren, newChildren, 'key')
+    newChildren = diffs.children
+
+    if (diffs.moves.length) {
+        let reorderPatch = { type: REORDER, moves: diffs.moves }
+        currentPatch.push(reorderPatch)
+    }
+
     let curNodeIndex = index
     oldChildren.forEach((child, i) => {
         keyId++
@@ -61,7 +70,7 @@ const walk = (oldNode, newNode, index, patches) => {
                 attrs: attrsPatches
             })
         }
-        diffChildren(oldNode.children, newNode.children, index, patches)
+        diffChildren(oldNode.children, newNode.children, index, patches, curPatch)
     } else {
         curPatch.push({
             type: REPLACE,
