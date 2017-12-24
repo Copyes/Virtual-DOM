@@ -1,98 +1,145 @@
-import _ from './utils'
-import listDiff from './list-diff'
-const REPLACE = 0
-const ATTRS = 1
-const TEXT = 2
-const REORDER = 3
+export default function diff(oldNodes, newNodes, parentNode = null) {
+  let oldIdentifies = oldNodes.map(vnode => identify(vnode))
+  let newIdentifies = newNodes.map(vnode => identify(vnode))
 
-const diffAttrs = (oldNode, newNode) => {
-  let count = 0
-  let attrsPatches = {}
+  let patches = []
+
+  let finalIdentities = []
+  let finalNodes = []
+
+  oldIdentifies.forEach((id, i) => {
+    let oldNode = oldNodes[i]
+    if (newIdentifies.indexOf(id) === -1) {
+      patches.push(makePatch('remove', oldNode))
+    } else {
+      finalIdentities.push(id)
+      finalNodes.push(oldNode)
+    }
+  })
+
+  let cursor = 0
+
+  newIdentifies.forEach((id, i) => {
+    let newNode = newNodes[i]
+
+    // all nodes are new
+    if (oldIdentifies.length === 0) {
+      patches.push(makePatch('append', parentNode, newNode))
+      return
+    }
+
+    let targetIndentity = finalIdentities[i]
+    let targetNode = finalNodes[i]
+
+    cursor = i
+    let foundPosition = findIndentityIndex(id, finalIdentities, cursor)
+
+    // identifies are at the same position, means node has not changed
+    if (id === targetIndentity) {
+      patches = patches.concat(diffSameNodes(targetNode, newNode))
+    } else if (foundPosition !== -1) {
+      // identifies are NOT at the same position, but exists in old nodes, means node has been moved
+      let oldNode = finalNodes[foundPosition]
+      let oldIndentity = finalIdentities[foundPosition]
+      patches.push(makePatch('move', targetNode, oldNode))
+
+      finalNodes.splice(foundPosition, 1)
+      finalNodes.splice(i, 0, oldNode)
+      finalIdentities.splice(foundPosition, 1)
+      finalIdentities.splice(i, 0, oldIndentity)
+    } else if (i < finalIdentities.length) {
+      // not exists, insert
+      patches.push(makePatch('insert', targetNode, newNode))
+      finalNodes.splice(i, 0, newNode)
+      finalIdentities.splice(i, 0, id)
+    } else {
+      // not exists, append
+      patches.push(makePatch('append', parentNode, newNode))
+      finalNodes.push(newNode)
+      finalIdentities.push(id)
+    }
+  })
+
+  // delete no use nodes
+  for (let i = cursor + 1; i < finalNodes.length; i++) {
+    let oldNode = finalNodes[i]
+    patches.push(makePatch('remove', oldNode))
+  }
+  finalNodes.splice(cursor + 1, finalNodes.length - cursor)
+
+  // update this.vnodes
+  oldNodes.splice(0, oldNodes.length)
+  finalNodes.forEach(item => oldNodes.push(item))
+
+  return patches
+}
+
+function identify(vnode) {
+  if (vnode.attrs.key) {
+    return vnode.name + ':' + vnode.attrs.key
+  }
+  return (
+    vnode.name + ':' + Object.keys(vnode.attrs).join(',') + '|' + !!vnode.text
+  )
+}
+
+function makePatch(action, target, context) {
+  return {
+    action,
+    target,
+    context
+  }
+}
+
+function diffSameNodes(oldNode, newNode) {
+  let patches = []
+
+  if (oldNode.text !== newNode.text) {
+    patches.push(makePatch('changeText', oldNode, newNode.text))
+  }
+
+  let attrsPatches = diffAttributes(oldNode, newNode)
+  if (attrsPatches.length) {
+    patches = patches.push(makePatch('changeAttribute', oldNode, attrsPatches))
+  }
+
+  let oldChildren = oldNode.children
+  let newChildren = newNode.children
+
+  patches = patches.concat(diff(oldChildren, newChildren, oldNode))
+
+  return patches
+}
+
+function diffAttributes(oldNode, newNode) {
+  let patches = []
+
   let oldAttrs = oldNode.attrs
   let newAttrs = newNode.attrs
-  let oldAttrsKeys = Object.keys(oldAttrs)
-  oldAttrsKeys.forEach(key => {
-    let value = oldAttrs[key]
-    if (newAttrs[key] !== value) {
-      count++
-      attrsPatches[key] = newAttrs[key]
-    }
-  })
-  let newAttrsKeys = Object.keys(newAttrs)
-  newAttrsKeys.forEach(key => {
-    let value = newAttrs[key]
-    if (!oldAttrs.hasOwnProperty(key)) {
-      count++
-      attrsPatches[key] = newAttrs[key]
-    }
-  })
-  if (count === 0) {
-    return null
-  }
-  return attrsPatches
-}
-let keyId = 0
-const diffChildren = (
-  oldChildren,
-  newChildren,
-  index,
-  patches,
-  currentPatch
-) => {
-  let diffs = listDiff(oldChildren, newChildren, 'key')
-  newChildren = diffs.children
 
-  if (diffs.moves.length) {
-    let reorderPatch = { type: REORDER, moves: diffs.moves }
-    currentPatch.push(reorderPatch)
-  }
+  let keys = Object.keys(newAttrs)
+  if (keys.length) {
+    keys.forEach(key => {
+      let oldValue = oldAttrs[key]
+      let newVaule = newAttrs[key]
 
-  let curNodeIndex = index
-  oldChildren.forEach((child, i) => {
-    keyId++
-    let newChild = newChildren[i]
-    curNodeIndex = keyId
-    walk(child, newChild, curNodeIndex, patches)
-  })
-  //return childrenPatches
-}
-
-const walk = (oldNode, newNode, index, patches) => {
-  let curPatch = []
-  if (newNode === null || newNode === undefined) {
-  } else if (_.isString(oldNode) && _.isString(newNode)) {
-    if (oldNode !== newNode) {
-      curPatch.push({
-        type: TEXT,
-        content: newNode
-      })
-    }
-  } else if (
-    oldNode.tagName === newNode.tagName &&
-    oldNode.key === newNode.key
-  ) {
-    let attrsPatches = diffAttrs(oldNode, newNode)
-    if (attrsPatches) {
-      curPatch.push({
-        type: ATTRS,
-        attrs: attrsPatches
-      })
-    }
-    diffChildren(oldNode.children, newNode.children, index, patches, curPatch)
-  } else {
-    curPatch.push({
-      type: REPLACE,
-      node: newNode
+      if (oldValue !== newVaule) {
+        patches.push({
+          key,
+          value: newVaule
+        })
+      }
     })
   }
 
-  if (curPatch.length) {
-    patches[index] = curPatch
-  }
-}
-export const diff = (oldNodes, newNodes) => {
-  let index = 0
-  let patches = {}
-  walk(oldNodes, newNodes, index, patches)
   return patches
+}
+
+function findIndentityIndex(id, ids, cursor) {
+  for (let i = cursor, len = ids.length; i < len; i++) {
+    if (id === ids[i]) {
+      return i
+    }
+  }
+  return -1
 }

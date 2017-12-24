@@ -1,50 +1,34 @@
-import _ from './utils'
-const REPLACE = 0
-const ATTRS = 1
-const TEXT = 2
-const REORDER = 3
+import createElement from './createElement'
 
-const walk = (node, walker, patches) => {
-  let curPatches = patches[walker.index]
-  let len = node.childrenNodes ? node.childrenNodes.length : 0
-  for (let i = 0; i < len; i++) {
-    let child = node.childrenNodes[i]
-    walker.index++
-    walk(child, walker, patches)
-  }
-
-  if (curPatches) {
-    dealPatch(node, curPatches)
-  }
-}
-
-const dealPatch = (node, patches) => {
-  patches.forEach(patch => {
-    switch (patch.type) {
-      case REPLACE:
-        let newNode =
-          typeof patch.node === 'string'
-            ? document.createTextNode(patch.node)
-            : patch.node.render()
+export default function patch(patches, topLevelElement) {
+  patches.forEach(item => {
+    let { action, target, context } = item
+    let $element = target === null ? topLevelElement : target.$element
+    switch (action) {
+      case 'remove':
+        $element.parentNode.removeChild($element)
+        $element.$vnode = null
+        target.$element = null
         break
-      case TEXT:
-        if (node.textContent) {
-          node.textContent = patch.content
-        } else {
-          node.nodeValue = patch.nodeValue
-        }
+      case 'append':
+        $element.appendChild(createElement(context))
         break
-      case ATTRS:
+      case 'insert':
+        $element.parentNode.insertBefore(createElement(context), $element)
         break
-      case REORDER:
+      case 'move':
+        $element.parentNode.insertBefore(context.$element, $element)
+        break
+      case 'changeText':
+        $element.innerText = context
+        break
+      case 'changeAttribute':
+        let newAttrs = context
+        newAttrs.forEach(attr => {
+          $element.setAttribute(attr.key, attr.value)
+        })
         break
       default:
-        throw new Error('')
     }
   })
-}
-
-export const patch = (rootNode, patches) => {
-  let walker = { index: 0 }
-  walk(rootNode, walker, patches)
 }

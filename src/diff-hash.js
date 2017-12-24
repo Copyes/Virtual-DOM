@@ -4,7 +4,6 @@ import { patch } from './patch'
 export default function diff(oldTree, newTree, parentVNode) {
   let oldHashes = oldTree.map(vnode => vnode._hash)
   let newHashes = newTree.map(vnode => vnode._hash)
-  console.log(oldHashes, newHashes, 1111)
   // to collect the patch
   let patches = []
   let recordHashes = []
