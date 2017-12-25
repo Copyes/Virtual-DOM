@@ -1,7 +1,7 @@
 import { Parser } from 'htmlparser2'
-import createElement from './createElement'
-import diff from './diff'
-import patch from './patch'
+import createElement from './vdom/createElement'
+import diff from './vdom/diff'
+import patch from './vdom/patch'
 
 function foreach(obj, callback) {
   let keys = Object.keys(obj)
@@ -10,11 +10,24 @@ function foreach(obj, callback) {
     callback(key, value)
   })
 }
+
 function merge(obj1, obj2) {
   let obj = {}
   foreach(obj1, (key, value) => (obj[key] = value))
   foreach(obj2, (key, value) => (obj[key] = value))
   return obj
+}
+
+// 插值替换
+const interpose = (str, key, value) => {
+  if (typeof str !== 'string') {
+    return str
+  }
+  if (str.indexOf('{{') > -1 && str.indexOf('}}')) {
+    let reg = new RegExp('{{' + key + '}}', 'g')
+    str = str.replace(reg, value)
+  }
+  return str
 }
 
 export default class VirtualDOM {
@@ -28,16 +41,6 @@ export default class VirtualDOM {
   createVirtualDOM() {
     let template = this.template
     let data = this.data
-    let interpose = (str, key, value) => {
-      if (typeof str !== 'string') {
-        return str
-      }
-      if (str.indexOf('{{') > -1 && str.indexOf('}}')) {
-        let reg = new RegExp('{{' + key + '}}', 'g')
-        str = str.replace(reg, value)
-      }
-      return str
-    }
 
     let dataKeys = Object.keys(data)
     if (dataKeys.length) {
@@ -47,10 +50,9 @@ export default class VirtualDOM {
       })
     }
 
-    let self = this
     let elements = []
     let recordtree = []
-
+    // 构建虚拟节点
     let createVNode = (name, attrs) => {
       let obj = {
         name,
@@ -81,9 +83,10 @@ export default class VirtualDOM {
 
       return obj
     }
-
+    // 解析html字符串，生成抽象语法数
     let parser = new Parser({
       onopentag(name, attrs) {
+        // 虚拟节点构造初始化
         let vnode = createVNode(name, attrs)
 
         let parent = recordtree.length
@@ -112,7 +115,8 @@ export default class VirtualDOM {
     })
     parser.parseChunk(template)
     parser.done()
-
+    console.log(elements)
+    // 解析对应的节点 如果发现是响应的模版就进行解析
     elements.forEach(vnode => {
       if (vnode.name === '@foreach') {
         let attrs = vnode.attrs
