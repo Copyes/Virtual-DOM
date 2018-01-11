@@ -11,10 +11,7 @@
     "type": "git",
     "url": "git+https://github.com/guapizuzhi/library-builder.git"
   },
-  "keywords": [
-    "webpack3",
-    "library"
-  ],
+  "keywords": ["webpack3", "library"],
   "author": "Copyes",
   "license": "ISC",
   "bugs": {
@@ -40,5 +37,8 @@
     "webpack-merge": "^4.1.0",
     "webpack-uglify-parallel": "^0.1.3",
     "yargs": "^8.0.2"
+  },
+  "devDependencies": {
+    "lodash": "^4.17.4"
   }
 }
